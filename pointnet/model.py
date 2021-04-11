@@ -174,6 +174,35 @@ class PointNetDenseCls(nn.Module):
         x = x.view(batchsize, n_pts, self.k)
         return x, trans, trans_feat
 
+class PointNetInpainting(nn.Module): 
+    def __init__(self, output=256, feature_transform = False):
+        super(PointNetInpainting, self).__init__()
+        self.k = output
+        self.feature_transform = feature_transform
+        self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
+        self.fc1 = nn.Linear(1024, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, output)
+        self.bn1 = nn.BatchNorm1d(512)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.deconv1 = nn.ConvTranspose1d(256, 256, 3)
+        self.stn = STN3d()
+        
+
+    def forward(self, x):
+        x, trans, trans_feat = self.feat(x)
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.relu(self.bn2(self.fc2(x)))
+        x = self.fc3(x)
+        x = x.view(-1, self.k, 1)
+        x = self.deconv1(x)
+        x = x.transpose(2, 1)
+        trans = self.stn(x)
+        x = x.transpose(2, 1)
+        x = torch.bmm(x, trans)
+        return x, trans, trans_feat
+
+
 def feature_transform_regularizer(trans):
     d = trans.size()[1]
     batchsize = trans.size()[0]
@@ -211,3 +240,7 @@ if __name__ == '__main__':
     seg = PointNetDenseCls(k = 3)
     out, _, _ = seg(sim_data)
     print('seg', out.size())
+
+    inp = PointNetInpainting(output = 256)
+    out, _, _ = inp(sim_data)
+    print('inp', out.size())
