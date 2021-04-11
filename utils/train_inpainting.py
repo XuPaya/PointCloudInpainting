@@ -24,7 +24,7 @@ parser.add_argument(
     '--nepoch', type=int, default=250, help='number of epochs to train for')
 parser.add_argument('--outf', type=str, default='cls', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
-parser.add_argument('--dataset', type=str, default='../../ShapeNet/shapenetcore_partanno_segmentation_benchmark_v0/', help="dataset path")
+parser.add_argument('--dataset', type=str, default='../../shapenet_data', help="dataset path")
 parser.add_argument('--dataset_type', type=str, default='shapenet', help="dataset type shapenet|modelnet40")
 parser.add_argument('--feature_transform', action='store_true', help="use feature transform")
 
@@ -112,12 +112,17 @@ for epoch in range(opt.nepoch):
         points, target = points.cuda(), target.cuda()
         optimizer.zero_grad()
         classifier = classifier.train()
-        pred, trans, trans_feat = classifier(points)
-        loss = nn.MSELoss(pred, target)
-        if opt.feature_transform:
-            loss += feature_transform_regularizer(trans_feat) * 0.001
+        pred,fine, trans, trans_feat = classifier(points)
+        
+        loss = classifier.create_loss(pred,fine,target,0.5)
         loss.backward()
         optimizer.step()
+        
+        #loss = nn.MSELoss(pred, target)
+        #if opt.feature_transform:
+            #loss += feature_transform_regularizer(trans_feat) * 0.001
+        #loss.backward()
+        #optimizer.step()
         #pred_choice = pred.data.max(1)[1]
         #correct = pred_choice.eq(target.data).cpu().sum()
         print('[%d: %d/%d] train loss: %f' % (epoch, i, num_batch, loss.item()))
@@ -129,8 +134,11 @@ for epoch in range(opt.nepoch):
             points = points.transpose(2, 1)
             points, target = points.cuda(), target.cuda()
             classifier = classifier.eval()
-            pred, _, _ = classifier(points)
-            loss = nn.MSELoss(pred, target)
+            pred,fine, _, _ = classifier(points)
+            
+            loss = classifier.create_loss(pred,fine,target,0.5)
+            
+            #loss = nn.MSELoss(pred, target)
             #pred_choice = pred.data.max(1)[1]
             #correct = pred_choice.eq(target.data).cpu().sum()
             print('[%d: %d/%d] %s loss: %f' % (epoch, i, num_batch, blue('test'), loss.item()))

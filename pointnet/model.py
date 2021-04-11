@@ -7,6 +7,10 @@ from torch.autograd import Variable
 import numpy as np
 import torch.nn.functional as F
 
+from emd import earth_mover_distance
+from chamfer_distance import ChamferDistance
+chamfer_dist = ChamferDistance()
+
 
 class STN3d(nn.Module):
     def __init__(self):
@@ -177,6 +181,13 @@ class PointNetDenseCls(nn.Module):
 class PointNetInpainting(nn.Module): 
     def __init__(self, output=256, feature_transform = False):
         super(PointNetInpainting, self).__init__()
+        
+        self.num_coarse = 256
+        self.grid_size = 4
+        self.grid_scale = 0.05
+        self.num_fine = self.grid_size ** 2 * self.num_coarse
+        self.npts = [1]
+        
         self.k = output
         self.feature_transform = feature_transform
         self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
@@ -200,7 +211,45 @@ class PointNetInpainting(nn.Module):
         trans = self.stn(x)
         x = x.transpose(2, 1)
         x = torch.bmm(x, trans)
-        return x, trans, trans_feat
+        
+        coarse = x
+        
+        
+        grid_row = torch.linspace(-0.05,0.05,self.grid_size).cuda()
+        grid_column = torch.linspace(-0.05,0.05,self.grid_size).cuda()
+        grid = torch.meshgrid(grid_row,grid_column)
+        grid = torch.reshape(torch.stack(grid,dim=2),(-1,2)).unsqueeze(0)
+        grid_feat = grid.repeat([features.shape[0],self.num_coarse,1])
+        # print("grid_Feat",grid_feat.shape)
+
+        point_feat = coarse.unsqueeze(2).repeat([1,1,self.grid_size**2,1])
+        point_feat = torch.reshape(point_feat, [-1,self.num_fine,3])
+        # print("point_Feat",point_feat.shape)
+        global_feat = features.unsqueeze(1).repeat([1,self.num_fine,1])
+        # print("global_Feat",global_feat.shape)
+        feat = torch.cat([grid_feat,point_feat,global_feat],dim=2)
+
+        center = coarse.unsqueeze(2).repeat([1,1,self.grid_size**2,1])
+        center = torch.reshape(center, [-1,self.num_fine,3])
+
+        fine = self.fold_mpl(feat.permute(0,2,1))
+        # print("fine shape",fine.shape," center shape",center.shape)
+        fine = fine.permute(0,2,1)  + center
+        
+        
+        return coarse,fine, trans, trans_feat
+    
+    
+    
+    def create_loss(self,coarse,fine,gt,alpha):
+        gt_ds = gt[:,:coarse.shape[1],:]
+        loss_coarse = earth_mover_distance(coarse, gt_ds, transpose=False)
+        dist1, dist2 = chamfer_dist(fine, gt)
+        loss_fine = (torch.mean(dist1)) + (torch.mean(dist2))
+        
+        loss = loss_coarse + alpha * loss_fine
+
+        return loss
 
 
 def feature_transform_regularizer(trans):
