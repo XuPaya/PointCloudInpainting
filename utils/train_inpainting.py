@@ -9,6 +9,7 @@ import torch.utils.data
 from pointnet.dataset import ShapeNetDataset, ModelNetDataset
 from pointnet.model import PointNetCls, feature_transform_regularizer
 import torch.nn.functional as F
+import torch.nn as nn
 from tqdm import tqdm
 
 
@@ -107,14 +108,14 @@ for epoch in range(opt.nepoch):
         optimizer.zero_grad()
         classifier = classifier.train()
         pred, trans, trans_feat = classifier(points)
-        loss = F.nll_loss(pred, target)
+        loss = nn.MSELoss(pred, target)
         if opt.feature_transform:
             loss += feature_transform_regularizer(trans_feat) * 0.001
         loss.backward()
         optimizer.step()
-        pred_choice = pred.data.max(1)[1]
-        correct = pred_choice.eq(target.data).cpu().sum()
-        print('[%d: %d/%d] train loss: %f accuracy: %f' % (epoch, i, num_batch, loss.item(), correct.item() / float(opt.batchSize)))
+        #pred_choice = pred.data.max(1)[1]
+        #correct = pred_choice.eq(target.data).cpu().sum()
+        print('[%d: %d/%d] train loss: %f' % (epoch, i, num_batch, loss.item()))
 
         if i % 10 == 0:
             j, data = next(enumerate(testdataloader, 0))
@@ -124,10 +125,10 @@ for epoch in range(opt.nepoch):
             points, target = points.cuda(), target.cuda()
             classifier = classifier.eval()
             pred, _, _ = classifier(points)
-            loss = F.nll_loss(pred, target)
-            pred_choice = pred.data.max(1)[1]
-            correct = pred_choice.eq(target.data).cpu().sum()
-            print('[%d: %d/%d] %s loss: %f accuracy: %f' % (epoch, i, num_batch, blue('test'), loss.item(), correct.item()/float(opt.batchSize)))
+            loss = nn.MSELoss(pred, target)
+            #pred_choice = pred.data.max(1)[1]
+            #correct = pred_choice.eq(target.data).cpu().sum()
+            print('[%d: %d/%d] %s loss: %f' % (epoch, i, num_batch, blue('test'), loss.item()))
 
     torch.save(classifier.state_dict(), '%s/cls_model_%d.pth' % (opt.outf, epoch))
 
