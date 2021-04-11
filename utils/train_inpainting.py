@@ -7,7 +7,7 @@ import torch.nn.parallel
 import torch.optim as optim
 import torch.utils.data
 from pointnet.dataset import ShapeNetDataset, ModelNetDataset
-from pointnet.model import PointNetCls, feature_transform_regularizer
+from pointnet.model import PointNetCls, feature_transform_regularizer, PointNetInpainting
 import torch.nn.functional as F
 from tqdm import tqdm
 
@@ -23,7 +23,7 @@ parser.add_argument(
     '--nepoch', type=int, default=250, help='number of epochs to train for')
 parser.add_argument('--outf', type=str, default='cls', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
-parser.add_argument('--dataset', type=str, required=True, help="dataset path")
+parser.add_argument('--dataset', type=str, default='../../ShapeNet/shapenetcore_partanno_segmentation_benchmark_v0/', help="dataset path")
 parser.add_argument('--dataset_type', type=str, default='shapenet', help="dataset type shapenet|modelnet40")
 parser.add_argument('--feature_transform', action='store_true', help="use feature transform")
 
@@ -40,12 +40,14 @@ torch.manual_seed(opt.manualSeed)
 if opt.dataset_type == 'shapenet':
     dataset = ShapeNetDataset(
         root=opt.dataset,
-        classification=True,
+        inpainting=True,
+        class_choice = ['Chair'],
         npoints=opt.num_points)
 
     test_dataset = ShapeNetDataset(
         root=opt.dataset,
-        classification=True,
+        inpainting=True,
+        class_choice = ['Chair'],
         split='test',
         npoints=opt.num_points,
         data_augmentation=False)
@@ -85,7 +87,10 @@ try:
 except OSError:
     pass
 
-classifier = PointNetCls(k=num_classes, feature_transform=opt.feature_transform)
+exit()
+
+# classifier = PointNetCls(k=num_classes, feature_transform=opt.feature_transform)
+classifier = PointNetInpainting(output=256, feature_transform=False)
 
 if opt.model != '':
     classifier.load_state_dict(torch.load(opt.model))

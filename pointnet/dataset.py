@@ -58,6 +58,7 @@ class ShapeNetDataset(data.Dataset):
                  root,
                  npoints=2500,
                  classification=False,
+                 inpainting=False,
                  class_choice=None,
                  split='train',
                  data_augmentation=True):
@@ -67,6 +68,7 @@ class ShapeNetDataset(data.Dataset):
         self.cat = {}
         self.data_augmentation = data_augmentation
         self.classification = classification
+        self.inpainting = inpainting
         self.seg_classes = {}
         
         with open(self.catfile, 'r') as f:
@@ -89,13 +91,23 @@ class ShapeNetDataset(data.Dataset):
         for file in filelist:
             _, category, uuid = file.split('/')
             if category in self.cat.values():
-                self.meta[self.id2cat[category]].append((os.path.join(self.root, category, 'points', uuid+'.pts'),
+                if self.inpainting:
+                    self.meta[self.id2cat[category]].append((os.path.join(self.root, category, 'points', uuid+'.pts'),
+                                        os.path.join(self.root, category, 'points_label', uuid+'.seg'),
+                                        os.path.join(self.root, category, 'sampling', uuid+'.sam'),
+                                        os.path.join(self.root, category, 'masked', uuid+'.msk')))
+                else:
+                    self.meta[self.id2cat[category]].append((os.path.join(self.root, category, 'points', uuid+'.pts'),
                                         os.path.join(self.root, category, 'points_label', uuid+'.seg')))
+                                            
 
         self.datapath = []
         for item in self.cat:
             for fn in self.meta[item]:
-                self.datapath.append((item, fn[0], fn[1]))
+                if self.inpainting:
+                    self.datapath.append((item, fn[0], fn[1], fn[2], fn[3]))
+                else:
+                    self.datapath.append((item, fn[0], fn[1]))
 
         self.classes = dict(zip(sorted(self.cat), range(len(self.cat))))
         print(self.classes)
@@ -111,6 +123,9 @@ class ShapeNetDataset(data.Dataset):
         cls = self.classes[self.datapath[index][0]]
         point_set = np.loadtxt(fn[1]).astype(np.float32)
         seg = np.loadtxt(fn[2]).astype(np.int64)
+        if self.inpainting == True :
+            point_set_2048 = np.loadtxt(fn[3]).astype(np.float64)
+            point_set_masked = np.loadtxt(fn[4]).astype(np.int64)
         #print(point_set.shape, seg.shape)
 
         choice = np.random.choice(len(seg), self.npoints, replace=True)
@@ -120,6 +135,14 @@ class ShapeNetDataset(data.Dataset):
         point_set = point_set - np.expand_dims(np.mean(point_set, axis = 0), 0) # center
         dist = np.max(np.sqrt(np.sum(point_set ** 2, axis = 1)),0)
         point_set = point_set / dist #scale
+        
+        if self.inpainting == True :
+
+            point_set_2048 = point_set_2048 - np.expand_dims(np.mean(point_set_2048, axis = 0), 0) # center
+            point_set_masked = point_set_masked - np.expand_dims(np.mean(point_set_2048, axis = 0), 0) # center
+            dist = np.max(np.sqrt(np.sum(point_set_2048 ** 2, axis = 1)),0)
+            point_set_2048 = point_set_2048 / dist #scale
+            point_set_masked = point_set_masked / dist #scale
 
         if self.data_augmentation:
             theta = np.random.uniform(0,np.pi*2)
@@ -129,9 +152,14 @@ class ShapeNetDataset(data.Dataset):
 
         seg = seg[choice]
         point_set = torch.from_numpy(point_set)
+
+        if self.inpainting:
+            point_set_2048 = torch.from_numpy(point_set_2048)
+            point_set_masked = torch.from_numpy(point_set_masked)
         seg = torch.from_numpy(seg)
         cls = torch.from_numpy(np.array([cls]).astype(np.int64))
-
+        if self.inpainting:
+            return point_set_2048, point_set_masked
         if self.classification:
             return point_set, cls
         else:
@@ -194,6 +222,8 @@ class ModelNetDataset(data.Dataset):
 if __name__ == '__main__':
     dataset = sys.argv[1]
     datapath = sys.argv[2]
+    # dataset = 'shapenet'
+    # datapath = 'D:\HKUST\COMP5214\ShapeNet\shapenetcore_partanno_segmentation_benchmark_v0'
 
     if dataset == 'shapenet':
         d = ShapeNetDataset(root = datapath, class_choice = ['Chair'])
@@ -205,6 +235,10 @@ if __name__ == '__main__':
         print(len(d))
         ps, cls = d[0]
         print(ps.size(), ps.type(), cls.size(),cls.type())
+
+        d = ShapeNetDataset(root = datapath, inpainting=True, class_choice = ['Chair'])
+        ps_2048, ps_msk = d[0]
+        print(ps_2048.size(), ps_msk.size())
         # get_segmentation_classes(datapath)
 
     if dataset == 'modelnet':
