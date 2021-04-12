@@ -124,7 +124,7 @@ class ShapeNetDataset(data.Dataset):
         point_set = np.loadtxt(fn[1]).astype(np.float32)
         seg = np.loadtxt(fn[2]).astype(np.int64)
         if self.inpainting == True :
-            point_set_2048 = np.loadtxt(fn[3]).astype(np.float32)
+            point_set_2048 = np.loadtxt(fn[3]).astype(np.float64)
             point_set_masked = np.loadtxt(fn[4]).astype(np.int64)
         #print(point_set.shape, seg.shape)
 
