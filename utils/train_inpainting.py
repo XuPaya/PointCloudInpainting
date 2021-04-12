@@ -19,12 +19,12 @@ parser.add_argument(
 parser.add_argument(
     '--num_points', type=int, default=2500, help='input batch size')
 parser.add_argument(
-    '--workers', type=int, help='number of data loading workers', default=4)
+    '--workers', type=int, help='number of data loading workers', default=0)
 parser.add_argument(
     '--nepoch', type=int, default=250, help='number of epochs to train for')
 parser.add_argument('--outf', type=str, default='cls', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
-parser.add_argument('--dataset', type=str, default='../../shapenet_data', help="dataset path")
+parser.add_argument('--dataset', type=str, default='../../ShapeNet/shapenetcore_partanno_segmentation_benchmark_v0/', help="dataset path")
 parser.add_argument('--dataset_type', type=str, default='shapenet', help="dataset type shapenet|modelnet40")
 parser.add_argument('--feature_transform', action='store_true', help="use feature transform")
 
@@ -88,7 +88,7 @@ try:
 except OSError:
     pass
 
-exit()
+# exit()
 
 # classifier = PointNetCls(k=num_classes, feature_transform=opt.feature_transform)
 classifier = PointNetInpainting(output=256, feature_transform=False)
@@ -107,6 +107,7 @@ for epoch in range(opt.nepoch):
     scheduler.step()
     for i, data in enumerate(dataloader, 0):
         points, target = data
+        print("pc type:: ", points.type())
         target = target[:, 0]
         points = points.transpose(2, 1)
         points, target = points.cuda(), target.cuda()

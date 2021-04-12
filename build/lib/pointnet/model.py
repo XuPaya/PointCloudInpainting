@@ -7,8 +7,7 @@ from torch.autograd import Variable
 import numpy as np
 import torch.nn.functional as F
 from PyTorchEMD.emd import earth_mover_distance
-from chamferdist import ChamferDistance
-#from pytorch3d.loss import chamfer_distance
+from chamfer_distance import ChamferDistance
 chamfer_dist = ChamferDistance()
 
 
@@ -201,8 +200,8 @@ class PointNetInpainting(nn.Module):
         
 
     def forward(self, x):
-        features, trans, trans_feat = self.feat(x)
-        x = F.relu(self.bn1(self.fc1(features)))
+        x, trans, trans_feat = self.feat(x)
+        x = F.relu(self.bn1(self.fc1(x)))
         x = F.relu(self.bn2(self.fc2(x)))
         x = self.fc3(x)
         x = x.view(-1, self.k, 1)
