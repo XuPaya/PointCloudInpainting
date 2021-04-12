@@ -7,9 +7,13 @@ import torch.nn.parallel
 import torch.optim as optim
 import torch.utils.data
 from dataset import ShapeNetDataset, ModelNetDataset
-from model import PointNetCls, feature_transform_regularizer
+from model import PointNetCls, feature_transform_regularizer, PointNetInpainting
 import torch.nn.functional as F
+import torch.nn as nn
 from tqdm import tqdm
+import open3d
+from Loss_temp1 import PointLoss
+from Loss_temp1 import distance_squre
 
 
 parser = argparse.ArgumentParser()
@@ -40,12 +44,14 @@ torch.manual_seed(opt.manualSeed)
 if opt.dataset_type == 'shapenet':
     dataset = ShapeNetDataset(
         root=opt.dataset,
-        classification=True,
+        inpainting=True,
+        class_choice = ['Chair'],
         npoints=opt.num_points)
 
     test_dataset = ShapeNetDataset(
         root=opt.dataset,
-        classification=True,
+        inpainting=True,
+        class_choice = ['Chair'],
         split='test',
         npoints=opt.num_points,
         data_augmentation=False)
@@ -85,7 +91,10 @@ try:
 except OSError:
     pass
 
-classifier = PointNetCls(k=num_classes, feature_transform=opt.feature_transform)
+exit()
+
+# classifier = PointNetCls(k=num_classes, feature_transform=opt.feature_transform)
+classifier = PointNetInpainting(output=256, feature_transform=False)
 
 if opt.model != '':
     classifier.load_state_dict(torch.load(opt.model))
@@ -107,14 +116,19 @@ for epoch in range(opt.nepoch):
         optimizer.zero_grad()
         classifier = classifier.train()
         pred, trans, trans_feat = classifier(points)
-        loss = F.nll_loss(pred, target)
-        if opt.feature_transform:
-            loss += feature_transform_regularizer(trans_feat) * 0.001
-        loss.backward()
-        optimizer.step()
-        pred_choice = pred.data.max(1)[1]
-        correct = pred_choice.eq(target.data).cpu().sum()
-        print('[%d: %d/%d] train loss: %f accuracy: %f' % (epoch, i, num_batch, loss.item(), correct.item() / float(opt.batchSize)))
+        
+        #loss = classifier.create_loss(pred,fine,target,0.5)
+        #loss.backward()
+        #optimizer.step()
+        
+        #loss = nn.MSELoss(pred, target)
+        #if opt.feature_transform:
+            #loss += feature_transform_regularizer(trans_feat) * 0.001
+        #loss.backward()
+        #optimizer.step()
+        #pred_choice = pred.data.max(1)[1]
+        #correct = pred_choice.eq(target.data).cpu().sum()
+        print('[%d: %d/%d] train loss: %f' % (epoch, i, num_batch, loss.item()))
 
         if i % 10 == 0:
             j, data = next(enumerate(testdataloader, 0))
@@ -124,10 +138,13 @@ for epoch in range(opt.nepoch):
             points, target = points.cuda(), target.cuda()
             classifier = classifier.eval()
             pred, _, _ = classifier(points)
-            loss = F.nll_loss(pred, target)
-            pred_choice = pred.data.max(1)[1]
-            correct = pred_choice.eq(target.data).cpu().sum()
-            print('[%d: %d/%d] %s loss: %f accuracy: %f' % (epoch, i, num_batch, blue('test'), loss.item(), correct.item()/float(opt.batchSize)))
+            
+            #loss = classifier.create_loss(pred,fine,target,0.5)
+            
+            #loss = nn.MSELoss(pred, target)
+            #pred_choice = pred.data.max(1)[1]
+            #correct = pred_choice.eq(target.data).cpu().sum()
+            print('[%d: %d/%d] %s loss: %f' % (epoch, i, num_batch, blue('test'), loss.item()))
 
     torch.save(classifier.state_dict(), '%s/cls_model_%d.pth' % (opt.outf, epoch))
 
@@ -139,10 +156,27 @@ for i,data in tqdm(enumerate(testdataloader, 0)):
     points = points.transpose(2, 1)
     points, target = points.cuda(), target.cuda()
     classifier = classifier.eval()
-    pred, _, _ = classifier(points)
-    pred_choice = pred.data.max(1)[1]
-    correct = pred_choice.eq(target.data).cpu().sum()
-    total_correct += correct.item()
-    total_testset += points.size()[0]
+    coarse, fine, _, _ = classifier(points)
+    
+    print(coarse.shape,fine.shape,target.shape)
+    pcd = open3d.PointCloud()
+    pcd.points = open3d.Vector3dVector(fine.data.cpu().numpy()[0]+np.array([1.0,0.0,0.0]))
+    pcd.colors = open3d.Vector3dVector(np.ones((fine.shape[1],3))* [0.76,0.23,0.14])
 
-print("final accuracy {}".format(total_correct / float(total_testset)))
+    pcd2 = open3d.PointCloud()
+    pcd2.points = open3d.Vector3dVector(target.data.cpu().numpy()[0]+np.array([-1.0,0.0,0.0]))
+    pcd2.colors = open3d.Vector3dVector(np.ones((target.shape[1],3))* [0.16,0.23,0.14])
+
+    pcd3 = open3d.PointCloud()
+    pcd3.points = open3d.Vector3dVector(points.data.cpu().numpy()[0])
+    pcd3.colors = open3d.Vector3dVector(np.ones((points.shape[1],3))* [0.16,0.23,0.14])
+    
+    open3d.draw_geometries([pcd,pcd2,pcd3])
+    
+    
+    #pred_choice = pred.data.max(1)[1]
+    #correct = pred_choice.eq(target.data).cpu().sum()
+    #total_correct += correct.item()
+    #total_testset += points.size()[0]
+
+#print("final accuracy {}".format(total_correct / float(total_testset)))

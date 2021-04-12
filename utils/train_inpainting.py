@@ -6,11 +6,12 @@ import torch
 import torch.nn.parallel
 import torch.optim as optim
 import torch.utils.data
-from pointnet.dataset import ShapeNetDataset, ModelNetDataset
-from pointnet.model import PointNetCls, feature_transform_regularizer, PointNetInpainting
+from dataset import ShapeNetDataset, ModelNetDataset
+from model import PointNetCls, feature_transform_regularizer, PointNetInpainting
 import torch.nn.functional as F
 import torch.nn as nn
 from tqdm import tqdm
+import open3d
 
 
 parser = argparse.ArgumentParser()
@@ -153,10 +154,27 @@ for i,data in tqdm(enumerate(testdataloader, 0)):
     points = points.transpose(2, 1)
     points, target = points.cuda(), target.cuda()
     classifier = classifier.eval()
-    pred, _, _ = classifier(points)
-    pred_choice = pred.data.max(1)[1]
-    correct = pred_choice.eq(target.data).cpu().sum()
-    total_correct += correct.item()
-    total_testset += points.size()[0]
+    coarse, fine, _, _ = classifier(points)
+    
+    print(coarse.shape,fine.shape,target.shape)
+    pcd = open3d.PointCloud()
+    pcd.points = open3d.Vector3dVector(fine.data.cpu().numpy()[0]+np.array([1.0,0.0,0.0]))
+    pcd.colors = open3d.Vector3dVector(np.ones((fine.shape[1],3))* [0.76,0.23,0.14])
 
-print("final accuracy {}".format(total_correct / float(total_testset)))
+    pcd2 = open3d.PointCloud()
+    pcd2.points = open3d.Vector3dVector(target.data.cpu().numpy()[0]+np.array([-1.0,0.0,0.0]))
+    pcd2.colors = open3d.Vector3dVector(np.ones((target.shape[1],3))* [0.16,0.23,0.14])
+
+    pcd3 = open3d.PointCloud()
+    pcd3.points = open3d.Vector3dVector(points.data.cpu().numpy()[0])
+    pcd3.colors = open3d.Vector3dVector(np.ones((points.shape[1],3))* [0.16,0.23,0.14])
+    
+    open3d.draw_geometries([pcd,pcd2,pcd3])
+    
+    
+    #pred_choice = pred.data.max(1)[1]
+    #correct = pred_choice.eq(target.data).cpu().sum()
+    #total_correct += correct.item()
+    #total_testset += points.size()[0]
+
+#print("final accuracy {}".format(total_correct / float(total_testset)))
