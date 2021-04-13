@@ -95,7 +95,8 @@ class ShapeNetDataset(data.Dataset):
                     self.meta[self.id2cat[category]].append((os.path.join(self.root, category, 'points', uuid+'.pts'),
                                         os.path.join(self.root, category, 'points_label', uuid+'.seg'),
                                         os.path.join(self.root, category, 'sampling', uuid+'.sam'),
-                                        os.path.join(self.root, category, 'masked', uuid+'.msk')))
+                                        os.path.join(self.root, category, 'masked', uuid+'.msk'),
+                                        os.path.join(self.root, category, 'unmasked', uuid+'.umk')))
                 else:
                     self.meta[self.id2cat[category]].append((os.path.join(self.root, category, 'points', uuid+'.pts'),
                                         os.path.join(self.root, category, 'points_label', uuid+'.seg')))
@@ -105,7 +106,7 @@ class ShapeNetDataset(data.Dataset):
         for item in self.cat:
             for fn in self.meta[item]:
                 if self.inpainting:
-                    self.datapath.append((item, fn[0], fn[1], fn[2], fn[3]))
+                    self.datapath.append((item, fn[0], fn[1], fn[2], fn[3], fn[4]))
                 else:
                     self.datapath.append((item, fn[0], fn[1]))
 
@@ -125,7 +126,8 @@ class ShapeNetDataset(data.Dataset):
         seg = np.loadtxt(fn[2]).astype(np.int64)
         if self.inpainting == True :
             point_set_2048 = np.loadtxt(fn[3]).astype(np.float32)
-            point_set_masked = np.loadtxt(fn[4]).astype(np.int64)
+            point_set_masked = np.loadtxt(fn[4]).astype(np.float32)
+            point_set_unmasked = np.loadtxt(fn[5]).astype(np.float32)
         #print(point_set.shape, seg.shape)
 
         choice = np.random.choice(len(seg), self.npoints, replace=True)
@@ -140,9 +142,11 @@ class ShapeNetDataset(data.Dataset):
 
             point_set_2048 = point_set_2048 - np.expand_dims(np.mean(point_set_2048, axis = 0), 0) # center
             point_set_masked = point_set_masked - np.expand_dims(np.mean(point_set_2048, axis = 0), 0) # center
+            point_set_unmasked = point_set_unmasked - np.expand_dims(np.mean(point_set_2048, axis = 0), 0) # center
             dist = np.max(np.sqrt(np.sum(point_set_2048 ** 2, axis = 1)),0)
             point_set_2048 = point_set_2048 / dist #scale
             point_set_masked = point_set_masked / dist #scale
+            point_set_unmasked = point_set_unmasked / dist #scale
 
         if self.data_augmentation:
             theta = np.random.uniform(0,np.pi*2)
@@ -159,7 +163,7 @@ class ShapeNetDataset(data.Dataset):
         seg = torch.from_numpy(seg)
         cls = torch.from_numpy(np.array([cls]).astype(np.int64))
         if self.inpainting:
-            return point_set_2048, point_set_masked
+            return point_set_masked, point_set_unmasked
         if self.classification:
             return point_set, cls
         else:

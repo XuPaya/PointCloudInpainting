@@ -105,10 +105,10 @@ classifier.cuda()
 num_batch = len(dataset) / opt.batchSize
 
 for epoch in range(opt.nepoch):
-    scheduler.step()
     for i, data in enumerate(dataloader, 0):
         points, target = data
-        print("pc type:: ", points.type())
+        print("pc shape:: ", points.shape, "target shape::", target.shape)
+        exit()
         target = target[:, 0]
         points = points.transpose(2, 1)
         points, target = points.cuda(), target.cuda()
@@ -144,6 +144,7 @@ for epoch in range(opt.nepoch):
             #pred_choice = pred.data.max(1)[1]
             #correct = pred_choice.eq(target.data).cpu().sum()
             print('[%d: %d/%d] %s loss: %f' % (epoch, i, num_batch, blue('test'), loss.item()))
+    scheduler.step()
 
     torch.save(classifier.state_dict(), '%s/cls_model_%d.pth' % (opt.outf, epoch))
 
