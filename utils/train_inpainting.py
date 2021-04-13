@@ -22,7 +22,7 @@ parser.add_argument(
 parser.add_argument(
     '--workers', type=int, help='number of data loading workers', default=0)
 parser.add_argument(
-    '--nepoch', type=int, default=250, help='number of epochs to train for')
+    '--nepoch', type=int, default=10, help='number of epochs to train for')
 parser.add_argument('--outf', type=str, default='cls', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
 parser.add_argument('--dataset', type=str, default='../../shapenet_data', help="dataset path")
@@ -107,9 +107,9 @@ num_batch = len(dataset) / opt.batchSize
 for epoch in range(opt.nepoch):
     for i, data in enumerate(dataloader, 0):
         points, target = data
-        print("pc shape:: ", points.shape, "target shape::", target.shape)
-        exit()
-        target = target[:, 0]
+        #print("pc shape:: ", points.shape, "target shape::", target.shape)
+        #exit()
+        #target = target[:, 0]
         points = points.transpose(2, 1)
         points, target = points.cuda(), target.cuda()
         optimizer.zero_grad()
@@ -128,11 +128,11 @@ for epoch in range(opt.nepoch):
         #pred_choice = pred.data.max(1)[1]
         #correct = pred_choice.eq(target.data).cpu().sum()
         print('[%d: %d/%d] train loss: %f' % (epoch, i, num_batch, loss.item()))
-
+        """
         if i % 10 == 0:
             j, data = next(enumerate(testdataloader, 0))
             points, target = data
-            target = target[:, 0]
+            #target = target[:, 0]
             points = points.transpose(2, 1)
             points, target = points.cuda(), target.cuda()
             classifier = classifier.eval()
@@ -144,22 +144,26 @@ for epoch in range(opt.nepoch):
             #pred_choice = pred.data.max(1)[1]
             #correct = pred_choice.eq(target.data).cpu().sum()
             print('[%d: %d/%d] %s loss: %f' % (epoch, i, num_batch, blue('test'), loss.item()))
+        """
     scheduler.step()
 
     torch.save(classifier.state_dict(), '%s/cls_model_%d.pth' % (opt.outf, epoch))
 
 total_correct = 0
 total_testset = 0
+counter = 0
 for i,data in tqdm(enumerate(testdataloader, 0)):
     points, target = data
-    target = target[:, 0]
+    #target = target[:, 0]
+    path = "./output/" + str(counter) + ".out"
     points = points.transpose(2, 1)
     points, target = points.cuda(), target.cuda()
     classifier = classifier.eval()
-    pred, _, _ = classifier(points)
+    with torch.no_grad():
+        pred, _, _ = classifier(points)
     
     
-    torch.save(pred, str(i)+'_test.pt')
+        torch.save(pred, str(i)+'_test.pt')
     
     """
     coarse, fine, _, _ = classifier(points)

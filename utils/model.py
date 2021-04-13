@@ -252,12 +252,28 @@ class PointNetInpainting(nn.Module):
         print(pred.shape)
         print(gt.shape)
         
-        dist1, dist2 = chamfer_dist(pred, gt)
-        loss_fine = (torch.mean(dist1)) + (torch.mean(dist2))
+        #dist1, dist2 = chamfer_dist(pred, gt)
+        #loss_fine = (torch.mean(dist1)) + (torch.mean(dist2))
+        #loss_fine = torch.dist(pred,gt)
+        #loss_fine = torch.mean(loss_fine)
+        """
+        dist = []
+        for i in range(pred.shape[0]):
+            pred_i = pred[i,:,:]
+            #pred_i.resize_(1,pred.shape[1],pred.shape[2])
+            gt_i = gt[i,:,:]
+            #gt_i.resize_(1,gt.shape[1],gt.shape[2])
+            dist_i = chamfer_dist(pred_i,gt_i)
+            dist.append(dist_i)
+         
+        loss = sum(dist)/len(dist)
+        """
         
         #loss = loss_coarse + alpha * loss_fine
         #return loss
-        return loss_fine
+        
+        dist = chamfer_dist(pred,gt)
+        return dist
 
 
 def feature_transform_regularizer(trans):
