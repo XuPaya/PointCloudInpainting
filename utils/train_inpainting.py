@@ -11,7 +11,7 @@ from model import PointNetCls, feature_transform_regularizer, PointNetInpainting
 import torch.nn.functional as F
 import torch.nn as nn
 from tqdm import tqdm
-import open3d
+#import open3d
 
 
 parser = argparse.ArgumentParser()
@@ -25,7 +25,7 @@ parser.add_argument(
     '--nepoch', type=int, default=250, help='number of epochs to train for')
 parser.add_argument('--outf', type=str, default='cls', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
-parser.add_argument('--dataset', type=str, default='../../ShapeNet/shapenetcore_partanno_segmentation_benchmark_v0/', help="dataset path")
+parser.add_argument('--dataset', type=str, default='../../shapenet_data', help="dataset path")
 parser.add_argument('--dataset_type', type=str, default='shapenet', help="dataset type shapenet|modelnet40")
 parser.add_argument('--feature_transform', action='store_true', help="use feature transform")
 
@@ -114,9 +114,9 @@ for epoch in range(opt.nepoch):
         points, target = points.cuda(), target.cuda()
         optimizer.zero_grad()
         classifier = classifier.train()
-        pred,fine, trans, trans_feat = classifier(points)
+        pred, trans, trans_feat = classifier(points)
         
-        loss = classifier.create_loss(pred,fine,target,0.5)
+        loss = classifier.create_loss(pred,target)
         loss.backward()
         optimizer.step()
         
@@ -136,9 +136,9 @@ for epoch in range(opt.nepoch):
             points = points.transpose(2, 1)
             points, target = points.cuda(), target.cuda()
             classifier = classifier.eval()
-            pred,fine, _, _ = classifier(points)
+            pred, _, _ = classifier(points)
             
-            loss = classifier.create_loss(pred,fine,target,0.5)
+            loss = classifier.create_loss(pred,target)
             
             #loss = nn.MSELoss(pred, target)
             #pred_choice = pred.data.max(1)[1]
@@ -155,6 +155,12 @@ for i,data in tqdm(enumerate(testdataloader, 0)):
     points = points.transpose(2, 1)
     points, target = points.cuda(), target.cuda()
     classifier = classifier.eval()
+    pred, _, _ = classifier(points)
+    
+    
+    torch.save(pred, str(i)+'_test.pt')
+    
+    """
     coarse, fine, _, _ = classifier(points)
     
     print(coarse.shape,fine.shape,target.shape)
@@ -171,6 +177,7 @@ for i,data in tqdm(enumerate(testdataloader, 0)):
     pcd3.colors = open3d.Vector3dVector(np.ones((points.shape[1],3))* [0.16,0.23,0.14])
     
     open3d.draw_geometries([pcd,pcd2,pcd3])
+    """
     
     
     #pred_choice = pred.data.max(1)[1]

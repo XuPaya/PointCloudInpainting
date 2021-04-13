@@ -6,10 +6,10 @@ import torch.utils.data
 from torch.autograd import Variable
 import numpy as np
 import torch.nn.functional as F
-#from PyTorchEMD.emd import earth_mover_distance
-from chamferdist import ChamferDistance
-#from pytorch3d.loss import chamfer_distance
-chamfer_dist = ChamferDistance()
+
+#from emd import earth_mover_distance
+#from chamfer_distance import ChamferDistance
+#chamfer_dist = ChamferDistance()
 
 
 class STN3d(nn.Module):
@@ -201,8 +201,8 @@ class PointNetInpainting(nn.Module):
         
 
     def forward(self, x):
-        features, trans, trans_feat = self.feat(x)
-        x = F.relu(self.bn1(self.fc1(features)))
+        x, trans, trans_feat = self.feat(x)
+        x = F.relu(self.bn1(self.fc1(x)))
         x = F.relu(self.bn2(self.fc2(x)))
         x = self.fc3(x)
         x = x.view(-1, self.k, 1)
@@ -211,7 +211,7 @@ class PointNetInpainting(nn.Module):
         trans = self.stn(x)
         x = x.transpose(2, 1)
         x = torch.bmm(x, trans)
-        """
+        
         coarse = x
         
         
@@ -238,26 +238,18 @@ class PointNetInpainting(nn.Module):
         
         
         return coarse,fine, trans, trans_feat
-        """
-        return x, trans, trans_feat
     
     
     
-    #def create_loss(self,coarse,fine,gt,alpha):
-    def create_loss(self,pred,gt):
-        #gt_ds = gt[:,:coarse.shape[1],:]
-        #loss_coarse = earth_mover_distance(coarse, gt_ds, transpose=False)
-        
-        print("The dim of pred and gt are:")
-        print(pred.shape)
-        print(gt.shape)
-        
-        dist1, dist2 = chamfer_dist(pred, gt)
+    def create_loss(self,coarse,fine,gt,alpha):
+        gt_ds = gt[:,:coarse.shape[1],:]
+        loss_coarse = earth_mover_distance(coarse, gt_ds, transpose=False)
+        dist1, dist2 = chamfer_dist(fine, gt)
         loss_fine = (torch.mean(dist1)) + (torch.mean(dist2))
         
-        #loss = loss_coarse + alpha * loss_fine
-        #return loss
-        return loss_fine
+        loss = loss_coarse + alpha * loss_fine
+
+        return loss
 
 
 def feature_transform_regularizer(trans):
