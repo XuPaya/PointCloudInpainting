@@ -10,8 +10,19 @@ from pointnet.dataset import ShapeNetDataset, ModelNetDataset
 from pointnet.model import PointNetCls, feature_transform_regularizer, PointNetInpainting
 import torch.nn.functional as F
 import torch.nn as nn
+import numpy as np
 from tqdm import tqdm
-
+# from chamferdist import ChamferDistance
+# chamfer = ChamferDistance()
+# source_cloud = torch.randn(5, 100, 3).cuda()
+# target_cloud = torch.randn(5, 100, 3).cuda()
+# dist1 = chamfer(source_cloud, target_cloud)
+# dist2 = chamfer(source_cloud[0:2], target_cloud[0:2])
+# dist3 = chamfer(source_cloud[2:5], target_cloud[2:5])
+# print(dist1.detach().cpu().item())
+# print(dist2.detach().cpu().item())
+# print(dist3.detach().cpu().item())
+# exit()
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -21,7 +32,7 @@ parser.add_argument(
 parser.add_argument(
     '--workers', type=int, help='number of data loading workers', default=0)
 parser.add_argument(
-    '--nepoch', type=int, default=250, help='number of epochs to train for')
+    '--nepoch', type=int, default=25, help='number of epochs to train for')
 parser.add_argument('--outf', type=str, default='cls', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
 parser.add_argument('--dataset', type=str, default='../../ShapeNet/shapenetcore_partanno_segmentation_benchmark_v0/', help="dataset path")
@@ -102,20 +113,19 @@ scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.5)
 classifier.cuda()
 
 num_batch = len(dataset) / opt.batchSize
-
+counter = 0;
 for epoch in range(opt.nepoch):
     for i, data in enumerate(dataloader, 0):
         points, target = data
         print("pc shape:: ", points.shape, "target shape::", target.shape)
-        exit()
-        target = target[:, 0]
+        # target = target[:, 0]
         points = points.transpose(2, 1)
         points, target = points.cuda(), target.cuda()
         optimizer.zero_grad()
         classifier = classifier.train()
-        pred,fine, trans, trans_feat = classifier(points)
+        pred, trans, trans_feat = classifier(points)
         
-        loss = classifier.create_loss(pred,fine,target,0.5)
+        loss = classifier.create_loss(pred,target)
         loss.backward()
         optimizer.step()
         
@@ -131,18 +141,23 @@ for epoch in range(opt.nepoch):
         if i % 10 == 0:
             j, data = next(enumerate(testdataloader, 0))
             points, target = data
-            target = target[:, 0]
+            # target = target[:, 0]
             points = points.transpose(2, 1)
             points, target = points.cuda(), target.cuda()
             classifier = classifier.eval()
-            pred,fine, _, _ = classifier(points)
+            with torch.no_grad():
+                pred, _, _ = classifier(points)
             
-            loss = classifier.create_loss(pred,fine,target,0.5)
+                loss = classifier.create_loss(pred,target)
             
             #loss = nn.MSELoss(pred, target)
             #pred_choice = pred.data.max(1)[1]
             #correct = pred_choice.eq(target.data).cpu().sum()
             print('[%d: %d/%d] %s loss: %f' % (epoch, i, num_batch, blue('test'), loss.item()))
+            path = "./output/" + str(counter) + ".out";
+            points = points.transpose(2, 1)
+            complete_pc = torch.cat((points[0], pred[0]), 0);
+            np.savetxt(path, complete_pc.cpu().numpy(), fmt = "%10.5f");
     scheduler.step()
 
     torch.save(classifier.state_dict(), '%s/cls_model_%d.pth' % (opt.outf, epoch))

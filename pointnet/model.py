@@ -199,7 +199,6 @@ class PointNetInpainting(nn.Module):
         self.deconv1 = nn.ConvTranspose1d(256, 256, 3)
         self.stn = STN3d()
         
-
     def forward(self, x):
         features, trans, trans_feat = self.feat(x)
         x = F.relu(self.bn1(self.fc1(features)))
@@ -211,7 +210,7 @@ class PointNetInpainting(nn.Module):
         trans = self.stn(x)
         x = x.transpose(2, 1)
         x = torch.bmm(x, trans)
-        
+        """
         coarse = x
         
         
@@ -221,35 +220,41 @@ class PointNetInpainting(nn.Module):
         grid = torch.reshape(torch.stack(grid,dim=2),(-1,2)).unsqueeze(0)
         grid_feat = grid.repeat([features.shape[0],self.num_coarse,1])
         # print("grid_Feat",grid_feat.shape)
-
         point_feat = coarse.unsqueeze(2).repeat([1,1,self.grid_size**2,1])
         point_feat = torch.reshape(point_feat, [-1,self.num_fine,3])
         # print("point_Feat",point_feat.shape)
         global_feat = features.unsqueeze(1).repeat([1,self.num_fine,1])
         # print("global_Feat",global_feat.shape)
         feat = torch.cat([grid_feat,point_feat,global_feat],dim=2)
-
         center = coarse.unsqueeze(2).repeat([1,1,self.grid_size**2,1])
         center = torch.reshape(center, [-1,self.num_fine,3])
-
         fine = self.fold_mpl(feat.permute(0,2,1))
         # print("fine shape",fine.shape," center shape",center.shape)
         fine = fine.permute(0,2,1)  + center
         
         
         return coarse,fine, trans, trans_feat
-    
-    
-    
-    def create_loss(self,coarse,fine,gt,alpha):
-        gt_ds = gt[:,:coarse.shape[1],:]
-        loss_coarse = earth_mover_distance(coarse, gt_ds, transpose=False)
-        dist1, dist2 = chamfer_dist(fine, gt)
-        loss_fine = (torch.mean(dist1)) + (torch.mean(dist2))
-        
-        loss = loss_coarse + alpha * loss_fine
+        """
+        return x, trans, trans_feat
 
-        return loss
+
+    
+    
+    
+    def create_loss(self,pred,gt):
+            #gt_ds = gt[:,:coarse.shape[1],:]
+            #loss_coarse = earth_mover_distance(coarse, gt_ds, transpose=False)
+            
+            print("The dim of pred and gt are:")
+            print(pred.shape)
+            print(gt.shape)
+            
+            dist1 = chamfer_dist(pred, gt)
+            loss_fine = (torch.mean(dist1))
+            
+            #loss = loss_coarse + alpha * loss_fine
+            #return loss
+            return loss_fine
 
 
 def feature_transform_regularizer(trans):
