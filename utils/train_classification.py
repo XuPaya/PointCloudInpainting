@@ -18,12 +18,12 @@ parser.add_argument(
 parser.add_argument(
     '--num_points', type=int, default=2500, help='input batch size')
 parser.add_argument(
-    '--workers', type=int, help='number of data loading workers', default=4)
+    '--workers', type=int, help='number of data loading workers', default=0)
 parser.add_argument(
     '--nepoch', type=int, default=250, help='number of epochs to train for')
 parser.add_argument('--outf', type=str, default='cls', help='output folder')
 parser.add_argument('--model', type=str, default='', help='model path')
-parser.add_argument('--dataset', type=str, required=True, help="dataset path")
+parser.add_argument('--dataset', type=str, default='../../ShapeNet/shapenetcore_partanno_segmentation_benchmark_v0/', help="dataset path")
 parser.add_argument('--dataset_type', type=str, default='shapenet', help="dataset type shapenet|modelnet40")
 parser.add_argument('--feature_transform', action='store_true', help="use feature transform")
 
@@ -130,6 +130,8 @@ for epoch in range(opt.nepoch):
             print('[%d: %d/%d] %s loss: %f accuracy: %f' % (epoch, i, num_batch, blue('test'), loss.item(), correct.item()/float(opt.batchSize)))
 
     torch.save(classifier.state_dict(), '%s/cls_model_%d.pth' % (opt.outf, epoch))
+    path = '%s/pointnet_model_%d.pth' % (opt.outf, epoch)
+    classifier.saveFeat(path)
 
 total_correct = 0
 total_testset = 0

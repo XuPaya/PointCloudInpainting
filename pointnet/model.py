@@ -149,6 +149,9 @@ class PointNetCls(nn.Module):
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
         return F.log_softmax(x, dim=1), trans, trans_feat
+    
+    def saveFeat(self, path):
+        torch.save(self.feat.state_dict(), path);
 
 
 class PointNetDenseCls(nn.Module):
@@ -157,7 +160,7 @@ class PointNetDenseCls(nn.Module):
         self.k = k
         self.feature_transform=feature_transform
         self.feat = PointNetfeat(global_feat=False, feature_transform=feature_transform)
-        self.conv1 = torch.nn.Conv1d(1088, 512, 1)
+        self.conv1 = torch.nn.Conv1d(1024, 512, 1)
         self.conv2 = torch.nn.Conv1d(512, 256, 1)
         self.conv3 = torch.nn.Conv1d(256, 128, 1)
         self.conv4 = torch.nn.Conv1d(128, self.k, 1)
@@ -194,22 +197,28 @@ class PointNetInpainting(nn.Module):
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, output)
+        self.dropout = nn.Dropout(p=0.3)
+        self.conv1 = nn.Conv1d(3, 3, 1)
         self.bn1 = nn.BatchNorm1d(512)
         self.bn2 = nn.BatchNorm1d(256)
         self.deconv1 = nn.ConvTranspose1d(256, 256, 3)
         self.stn = STN3d()
+
+    def loadFeat(self, path):
+        self.feat.load_state_dict(torch.load(path));
         
     def forward(self, x):
         features, trans, trans_feat = self.feat(x)
         x = F.relu(self.bn1(self.fc1(features)))
-        x = F.relu(self.bn2(self.fc2(x)))
+        x = F.relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
         x = x.view(-1, self.k, 1)
-        x = self.deconv1(x)
+        x = F.relu(self.deconv1(x))
         x = x.transpose(2, 1)
-        trans = self.stn(x)
-        x = x.transpose(2, 1)
-        x = torch.bmm(x, trans)
+        x = F.leaky_relu(self.conv1(x))
+        #trans = self.stn(x)
+        #x = x.transpose(2, 1)
+        #x = torch.bmm(x, trans)
         """
         coarse = x
         
@@ -236,25 +245,48 @@ class PointNetInpainting(nn.Module):
         return coarse,fine, trans, trans_feat
         """
         return x, trans, trans_feat
+        
 
 
     
     
     
     def create_loss(self,pred,gt):
-            #gt_ds = gt[:,:coarse.shape[1],:]
-            #loss_coarse = earth_mover_distance(coarse, gt_ds, transpose=False)
+            #loss_coarse = earth_mover_distance(pred, gt, transpose=False)
             
-            print("The dim of pred and gt are:")
-            print(pred.shape)
-            print(gt.shape)
+            # print("The dim of pred and gt are:")
+            # print(pred.shape)
+            # print(gt.shape)
             
             dist1 = chamfer_dist(pred, gt)
-            loss_fine = (torch.mean(dist1))
+            loss = (torch.mean(dist1))
             
             #loss = loss_coarse + alpha * loss_fine
             #return loss
-            return loss_fine
+            return loss
+
+class PointNetDiscriminator(nn.Module):
+    def __init__(self, k=1, feature_transform=False):
+        super(PointNetDiscriminator, self).__init__()
+        self.feature_transform = feature_transform
+        self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
+        self.fc1 = nn.Linear(1024, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, k)
+        self.dropout = nn.Dropout(p=0.3)
+        self.bn1 = nn.BatchNorm1d(512)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.relu = nn.ReLU()
+
+    def loadFeat(self, path):
+        self.feat.load_state_dict(torch.load(path));
+
+    def forward(self, x):
+        x, trans, trans_feat = self.feat(x)
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.relu(self.bn2(self.dropout(self.fc2(x))))
+        x = self.fc3(x)
+        return x, trans, trans_feat
 
 
 def feature_transform_regularizer(trans):

@@ -15,15 +15,15 @@ def onmouse(*args):
     mousey = y / float(showsz)
     changed = True
 
-cv2.namedWindow('show3d')
-cv2.moveWindow('show3d', 0, 0)
-cv2.setMouseCallback('show3d', onmouse)
+# cv2.namedWindow('show3d')
+# cv2.moveWindow('show3d', 0, 0)
+# cv2.setMouseCallback('show3d', onmouse)
 
 dll = np.ctypeslib.load_library('render_balls_so', '.')
 
 def showpoints(xyz,c_gt=None, c_pred = None, waittime=0, 
-    showrot=False, magnifyBlue=0, freezerot=False, background=(0,0,0), 
-    normalizecolor=True, ballradius=10):
+    showrot=False, magnifyBlue=0, freezerot=True, background=(0,0,0), 
+    normalizecolor=True, ballradius=10, path = 'show3d.png'):
     global showsz, mousex, mousey, zoom, changed
     xyz=xyz-xyz.mean(axis=0)
     radius=((xyz**2).sum(axis=-1)**0.5).max()
@@ -82,7 +82,7 @@ def showpoints(xyz,c_gt=None, c_pred = None, waittime=0,
             ixyz.ctypes.data_as(ct.c_void_p), c0.ctypes.data_as(ct.c_void_p),
             c1.ctypes.data_as(ct.c_void_p), c2.ctypes.data_as(ct.c_void_p),
             ct.c_int(ballradius))
-
+        
         if magnifyBlue > 0:
             show[:, :, 0] = np.maximum(show[:, :, 0], np.roll(
                 show[:, :, 0], 1, axis=0))
@@ -106,59 +106,7 @@ def showpoints(xyz,c_gt=None, c_pred = None, waittime=0,
         if changed:
             render()
             changed = False
-        cv2.imshow('show3d', show)
-        if waittime == 0:
-            cmd = cv2.waitKey(10) % 256
-        else:
-            cmd = cv2.waitKey(waittime) % 256
-        if cmd == ord('q'):
-            break
-        elif cmd == ord('Q'):
-            sys.exit(0)
-
-        if cmd == ord('t') or cmd == ord('p'):
-            if cmd == ord('t'):
-                if c_gt is None:
-                    c0 = np.zeros((len(xyz), ), dtype='float32') + 255
-                    c1 = np.zeros((len(xyz), ), dtype='float32') + 255
-                    c2 = np.zeros((len(xyz), ), dtype='float32') + 255
-                else:
-                    c0 = c_gt[:, 0]
-                    c1 = c_gt[:, 1]
-                    c2 = c_gt[:, 2]
-            else:
-                if c_pred is None:
-                    c0 = np.zeros((len(xyz), ), dtype='float32') + 255
-                    c1 = np.zeros((len(xyz), ), dtype='float32') + 255
-                    c2 = np.zeros((len(xyz), ), dtype='float32') + 255
-                else:
-                    c0 = c_pred[:, 0]
-                    c1 = c_pred[:, 1]
-                    c2 = c_pred[:, 2]
-            if normalizecolor:
-                c0 /= (c0.max() + 1e-14) / 255.0
-                c1 /= (c1.max() + 1e-14) / 255.0
-                c2 /= (c2.max() + 1e-14) / 255.0
-            c0 = np.require(c0, 'float32', 'C')
-            c1 = np.require(c1, 'float32', 'C')
-            c2 = np.require(c2, 'float32', 'C')
-            changed = True
-
-        if cmd==ord('n'):
-            zoom*=1.1
-            changed=True
-        elif cmd==ord('m'):
-            zoom/=1.1
-            changed=True
-        elif cmd==ord('r'):
-            zoom=1.0
-            changed=True
-        elif cmd==ord('s'):
-            cv2.imwrite('show3d.png',show)
-        if waittime!=0:
-            break
-    return cmd
-
+        cv2.imwrite(path, show)
 if __name__ == '__main__':
     np.random.seed(100)
     showpoints(np.random.randn(2500, 3))
