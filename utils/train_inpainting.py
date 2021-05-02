@@ -104,7 +104,7 @@ except OSError:
 # classifier = PointNetCls(k=num_classes, feature_transform=opt.feature_transform)
 classifier = PointNetInpainting(output=256, feature_transform=False)
 epoch = 1
-path = '%s/pointnet_model_%d.pth' % (opt.outf, epoch)
+path = '%s/denseCls_feat_model_249.pth' % (opt.outf)
 classifier.loadFeat(path)
 
 if opt.model != '':
@@ -112,7 +112,7 @@ if opt.model != '':
 
 
 optimizer = optim.Adam(classifier.parameters(), lr=0.001, betas=(0.9, 0.999))
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.5)
 classifier.cuda()
 
 num_batch = len(dataset) / opt.batchSize
@@ -127,7 +127,7 @@ for epoch in range(opt.nepoch):
         classifier = classifier.train()
         pred, trans, trans_feat = classifier(points)
         pred = pred.transpose(2, 1)
-        loss = classifier.create_loss(pred,target)
+        loss = (classifier.create_loss(target, pred) + classifier.create_loss(pred, target))
         loss.backward()
         optimizer.step()
         
@@ -151,7 +151,7 @@ for epoch in range(opt.nepoch):
                 pred, _, _ = classifier(points)
                 pred = pred.transpose(2, 1)
             
-                loss = classifier.create_loss(pred,target)
+                loss = (classifier.create_loss(target, pred) + classifier.create_loss(pred, target))
             
             #loss = nn.MSELoss(pred, target)
             #pred_choice = pred.data.max(1)[1]

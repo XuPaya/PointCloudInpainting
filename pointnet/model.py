@@ -130,6 +130,50 @@ class PointNetfeat(nn.Module):
             x = x.view(-1, 1024, 1).repeat(1, 1, n_pts)
             return torch.cat([x, pointfeat], 1), trans, trans_feat
 
+
+
+class D_PointNetfeat(nn.Module):
+    def __init__(self, global_feat = True, feature_transform = False):
+        super(D_PointNetfeat, self).__init__()
+        self.stn = STN3d()
+        self.conv1 = torch.nn.Conv1d(3, 64, 1)
+        self.conv2 = torch.nn.Conv1d(64, 64, 1)
+        self.conv3 = torch.nn.Conv1d(64, 256, 1)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.bn2 = nn.BatchNorm1d(64)
+        self.bn3 = nn.BatchNorm1d(256)
+        self.global_feat = global_feat
+        self.feature_transform = feature_transform
+        if self.feature_transform:
+            self.fstn = STNkd(k=64)
+
+    def forward(self, x):
+        n_pts = x.size()[2]
+        trans = self.stn(x)
+        x = x.transpose(2, 1)
+        x = torch.bmm(x, trans)
+        x = x.transpose(2, 1)
+        x = F.relu(self.bn1(self.conv1(x)))
+
+        if self.feature_transform:
+            trans_feat = self.fstn(x)
+            x = x.transpose(2,1)
+            x = torch.bmm(x, trans_feat)
+            x = x.transpose(2,1)
+        else:
+            trans_feat = None
+
+        pointfeat = x
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.bn3(self.conv3(x))
+        x = torch.max(x, 2, keepdim=True)[0]
+        x = x.view(-1, 256)
+        if self.global_feat:
+            return x, trans, trans_feat
+        else:
+            x = x.view(-1, 256, 1).repeat(1, 1, n_pts)
+            return torch.cat([x, pointfeat], 1), trans, trans_feat
+
 class PointNetCls(nn.Module):
     def __init__(self, k=2, feature_transform=False):
         super(PointNetCls, self).__init__()
@@ -185,40 +229,57 @@ class PointNetInpainting(nn.Module):
     def __init__(self, output=256, feature_transform = False):
         super(PointNetInpainting, self).__init__()
         
-        self.num_coarse = 256
-        self.grid_size = 4
-        self.grid_scale = 0.05
-        self.num_fine = self.grid_size ** 2 * self.num_coarse
-        self.npts = [1]
+        # self.num_coarse = 256
+        # self.grid_size = 4
+        # self.grid_scale = 0.05
+        # self.num_fine = self.grid_size ** 2 * self.num_coarse
+        # self.npts = [1]
         
         self.k = output
         self.feature_transform = feature_transform
         self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
         self.fc1 = nn.Linear(1024, 512)
         self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, output)
+        self.fc3 = nn.Linear(256, 256)
+        self.fc4 = nn.Linear(256, output * 3)
         self.dropout = nn.Dropout(p=0.3)
-        self.conv1 = nn.Conv1d(3, 3, 1)
+        self.conv1 = nn.Conv1d(3, 32, 1, bias=False)
+        self.conv2 = nn.Conv1d(32, 3, 1, bias=False)
         self.bn1 = nn.BatchNorm1d(512)
         self.bn2 = nn.BatchNorm1d(256)
-        self.deconv1 = nn.ConvTranspose1d(256, 256, 3)
+        self.bn3 = nn.BatchNorm1d(256)
+        self.deconv1 = nn.ConvTranspose1d(256, 256, 3, bias=False)
+        self.deconv2 = nn.ConvTranspose1d(2048, 256, 1, bias=False)
         self.stn = STN3d()
+        # nn.init.normal_(self.fc1.weight)
+        # nn.init.normal_(self.fc2.weight)
+        # nn.init.normal_(self.fc3.weight)
+        # nn.init.uniform_(self.deconv1.weight)
+        # nn.init.normal_(self.conv1.weight)
 
     def loadFeat(self, path):
         self.feat.load_state_dict(torch.load(path));
         
-    def forward(self, x):
-        features, trans, trans_feat = self.feat(x)
-        x = F.relu(self.bn1(self.fc1(features)))
+    def forward(self, pts):
+        # self.feat.eval()
+        x, trans, trans_feat = self.feat(pts)
+        x = F.relu(self.bn1(self.dropout(self.fc1(x))))
         x = F.relu(self.bn2(self.dropout(self.fc2(x))))
-        x = self.fc3(x)
-        x = x.view(-1, self.k, 1)
-        x = F.relu(self.deconv1(x))
-        x = x.transpose(2, 1)
-        x = F.leaky_relu(self.conv1(x))
-        #trans = self.stn(x)
-        #x = x.transpose(2, 1)
-        #x = torch.bmm(x, trans)
+        x = F.relu(self.bn3(self.dropout(self.fc3(x))))
+        x = self.fc4(x)
+        x = x.view(-1, 3, 256)
+        # x = self.bn3(self.deconv1(x))
+        # pts = pts.transpose(2, 1)
+        # x = torch.cat((pts, x), 1)
+        # x = self.bn4(self.deconv2(x))
+        # x = F.relu(self.bn3(self.conv1(x)))
+        # x = F.relu(self.conv2(x))
+        # x = self.bn3(x)
+        # x = x.transpose(2, 1)
+        # trans = self.stn(x)
+        # x = x.transpose(2, 1)
+        # x = torch.bmm(x, trans)
+        # x = x.transpose(2, 1)
         """
         coarse = x
         
@@ -244,7 +305,7 @@ class PointNetInpainting(nn.Module):
         
         return coarse,fine, trans, trans_feat
         """
-        return x, trans, trans_feat
+        return torch.tanh(x), trans, trans_feat
         
 
 
@@ -269,24 +330,25 @@ class PointNetDiscriminator(nn.Module):
     def __init__(self, k=1, feature_transform=False):
         super(PointNetDiscriminator, self).__init__()
         self.feature_transform = feature_transform
-        self.feat = PointNetfeat(global_feat=True, feature_transform=feature_transform)
-        self.fc1 = nn.Linear(1024, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, k)
+        self.feat = D_PointNetfeat(global_feat=True, feature_transform=feature_transform)
+        self.fc1 = nn.Linear(256, 128)
+        self.fc2 = nn.Linear(128, 16)
+        self.fc3 = nn.Linear(16, k)
         self.dropout = nn.Dropout(p=0.3)
-        self.bn1 = nn.BatchNorm1d(512)
-        self.bn2 = nn.BatchNorm1d(256)
+        self.bn1 = nn.BatchNorm1d(128)
+        self.bn2 = nn.BatchNorm1d(16)
         self.relu = nn.ReLU()
 
     def loadFeat(self, path):
-        self.feat.load_state_dict(torch.load(path));
+        # self.feat.load_state_dict(torch.load(path));
+        return
 
     def forward(self, x):
         x, trans, trans_feat = self.feat(x)
-        x = F.relu(self.bn1(self.fc1(x)))
-        x = F.relu(self.bn2(self.dropout(self.fc2(x))))
+        x = F.leaky_relu(self.bn1(self.fc1(x)))
+        x = F.leaky_relu(self.bn2(self.dropout(self.fc2(x))))
         x = self.fc3(x)
-        return x, trans, trans_feat
+        return torch.sigmoid(x), trans, trans_feat
 
 
 def feature_transform_regularizer(trans):

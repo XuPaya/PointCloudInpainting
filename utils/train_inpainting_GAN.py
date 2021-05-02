@@ -12,21 +12,11 @@ import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
 from tqdm import tqdm
-# from chamferdist import ChamferDistance
-# chamfer = ChamferDistance()
-# source_cloud = torch.randn(5, 100, 3).cuda()
-# target_cloud = torch.randn(5, 100, 3).cuda()
-# dist1 = chamfer(source_cloud, target_cloud)
-# dist2 = chamfer(source_cloud[0:2], target_cloud[0:2])
-# dist3 = chamfer(source_cloud[2:5], target_cloud[2:5])
-# print(dist1.detach().cpu().item())
-# print(dist2.detach().cpu().item())
-# print(dist3.detach().cpu().item())
-# exit()
+from PyTorchEMD.emd import earth_mover_distance
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    '--batchSize', type=int, default=16, help='input batch size')
+    '--batchSize', type=int, default=32, help='input batch size')
 parser.add_argument(
     '--num_points', type=int, default=2500, help='input batch size')
 parser.add_argument(
@@ -104,7 +94,7 @@ except OSError:
 # classifier = PointNetCls(k=num_classes, feature_transform=opt.feature_transform)
 classifier = PointNetInpainting(output=256, feature_transform=False)
 epoch = 1
-path = '%s/pointnet_model_%d.pth' % (opt.outf, epoch)
+path = '%s/denseCls_feat_model_249.pth' % (opt.outf)
 classifier.loadFeat(path)
 discriminator = PointNetDiscriminator()
 discriminator.loadFeat(path)
@@ -116,10 +106,12 @@ if opt.model != '':
 
 optimizer = optim.RMSprop(classifier.parameters(), lr=0.001)
 d_optimizer = optim.RMSprop(discriminator.parameters(), lr=0.001)
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
-d_scheduler = optim.lr_scheduler.StepLR(d_optimizer, step_size=50, gamma=0.5)
+scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.5)
+d_scheduler = optim.lr_scheduler.StepLR(d_optimizer, step_size=15, gamma=0.5)
 classifier.cuda()
 discriminator.cuda()
+
+
 
 num_batch = len(dataset) / opt.batchSize
 counter = 0;
@@ -130,6 +122,8 @@ for epoch in range(opt.nepoch):
         target = target.transpose(2, 1)
         points = points.transpose(2, 1)
         points, target = points.cuda(), target.cuda()
+
+
         d_optimizer.zero_grad()
         classifier = classifier.train()
         pred, trans, trans_feat = classifier(points)
@@ -137,29 +131,32 @@ for epoch in range(opt.nepoch):
         target_complete = torch.cat((points, target), 2)
         D_fake, _, _ = discriminator(pred_complete)
         D_real, _, _ = discriminator(target_complete)
-        D_loss = -(torch.mean(D_real) - torch.mean(D_fake))
+        D_loss = torch.mean((1 - D_real)**2 + D_fake**2)
         # print('D loss: %f' % (torch.mean(D_real).item()))
         D_loss.backward()
         d_optimizer.step()
-        for p in discriminator.parameters():
-            p.data.clamp_(-0.1, 0.1)
+
 
 
         
 
-        if (epoch < 10):
-            print('[%d: %d/%d] D loss: %f' % (epoch, i, num_batch, D_loss.item()))
-            continue
+        # if (epoch < 2):
+        #     print('[%d: %d/%d] D loss: %f' % (epoch, i, num_batch, D_loss.item()))
+        #     continue
         
-        if i % 5 == 0:
-            optimizer.zero_grad()
-            pred, _, _ = classifier(points)
-            pred_complete = torch.cat((points, pred), 2)
-            D_fake, _, _ = discriminator(pred_complete)
-            G_loss = -torch.mean(D_fake)
+        optimizer.zero_grad()
+        pred, _, _ = classifier(points)
+        pred_complete = torch.cat((points, pred), 2)
+        # print(pred_complete.shape)
+        D_fake, _, _ = discriminator(pred_complete)
+        G_loss = torch.mean((1 - D_fake)**2)
+        pred = pred.transpose(2, 1)
+        target = target.transpose(2, 1)
+        # print(pred.shape)
+        G_loss += 0.1 * (0.25 * classifier.create_loss(pred, target) + 0.75 * classifier.create_loss(target, pred))
 
-            G_loss.backward()
-            optimizer.step()
+        G_loss.backward()
+        optimizer.step()
         
         #loss = nn.MSELoss(pred, target)
         #if opt.feature_transform:
@@ -169,10 +166,8 @@ for epoch in range(opt.nepoch):
         #pred_choice = pred.data.max(1)[1]
         #correct = pred_choice.eq(target.data).cpu().sum()
         with torch.no_grad():
-            pred = pred.transpose(2, 1)
-            target = target.transpose(2, 1)
-            loss = classifier.create_loss(pred, target)
-        print('[%d: %d/%d] train loss: %f, %f' % (epoch, i, num_batch, loss.item(), G_loss.item()))
+            loss = (0.25 * classifier.create_loss(pred, target) + 0.75 * classifier.create_loss(target, pred))
+        print('[%d: %d/%d] train loss: %f, %f, %f' % (epoch, i, num_batch, loss.item(), D_loss.item(), G_loss.item()))
 
         if i % 10 == 0:
             j, data = next(enumerate(dataloader, 0))
@@ -184,7 +179,7 @@ for epoch in range(opt.nepoch):
             classifier = classifier.eval()
             with torch.no_grad():
                 pred, _, _ = classifier(points)
-                loss = classifier.create_loss(pred,target)
+                loss = (0.25 * classifier.create_loss(pred, target) + 0.75 * classifier.create_loss(target, pred))
             
             #loss = nn.MSELoss(pred, target)
             #pred_choice = pred.data.max(1)[1]
