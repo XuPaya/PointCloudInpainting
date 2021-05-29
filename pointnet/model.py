@@ -251,11 +251,11 @@ class PointNetInpainting(nn.Module):
         self.deconv1 = nn.ConvTranspose1d(256, 256, 3, bias=False)
         self.deconv2 = nn.ConvTranspose1d(2048, 256, 1, bias=False)
         self.stn = STN3d()
-        # nn.init.normal_(self.fc1.weight)
-        # nn.init.normal_(self.fc2.weight)
+        nn.init.normal_(self.fc1.weight)
+        nn.init.normal_(self.fc2.weight)
         # nn.init.normal_(self.fc3.weight)
         # nn.init.uniform_(self.deconv1.weight)
-        # nn.init.normal_(self.conv1.weight)
+        nn.init.normal_(self.conv1.weight)
 
     def loadFeat(self, path):
         self.feat.load_state_dict(torch.load(path));
@@ -263,15 +263,12 @@ class PointNetInpainting(nn.Module):
     def forward(self, pts):
         # self.feat.eval()
         x, trans, trans_feat = self.feat(pts)
-        x = F.relu(self.bn1(self.dropout(self.fc1(x))))
-        x = F.relu(self.bn2(self.dropout(self.fc2(x))))
-        x = F.relu(self.bn3(self.dropout(self.fc3(x))))
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.relu(self.bn2(self.fc2(x)))
+        x = F.relu(self.bn3(self.fc3(x)))
         x = self.fc4(x)
         x = x.view(-1, 3, 256)
         # x = self.bn3(self.deconv1(x))
-        # pts = pts.transpose(2, 1)
-        # x = torch.cat((pts, x), 1)
-        # x = self.bn4(self.deconv2(x))
         # x = F.relu(self.bn3(self.conv1(x)))
         # x = F.relu(self.conv2(x))
         # x = self.bn3(x)
@@ -332,11 +329,11 @@ class PointNetDiscriminator(nn.Module):
         self.feature_transform = feature_transform
         self.feat = D_PointNetfeat(global_feat=True, feature_transform=feature_transform)
         self.fc1 = nn.Linear(256, 128)
-        self.fc2 = nn.Linear(128, 16)
-        self.fc3 = nn.Linear(16, k)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, k)
         self.dropout = nn.Dropout(p=0.3)
         self.bn1 = nn.BatchNorm1d(128)
-        self.bn2 = nn.BatchNorm1d(16)
+        self.bn2 = nn.BatchNorm1d(64)
         self.relu = nn.ReLU()
 
     def loadFeat(self, path):

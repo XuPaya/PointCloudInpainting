@@ -49,7 +49,7 @@ if opt.dataset_type == 'shapenet':
     test_dataset = ShapeNetDataset(
         root=opt.dataset,
         inpainting=True,
-        class_choice = ['Chair'],
+        class_choice = ['Guitar'],
         split='test',
         npoints=opt.num_points,
         data_augmentation=False)
@@ -93,18 +93,19 @@ except OSError:
 
 # classifier = PointNetCls(k=num_classes, feature_transform=opt.feature_transform)
 classifier = PointNetInpainting(output=256, feature_transform=False)
-epoch = 1
+epoch_r = 41
 path = '%s/denseCls_feat_model_249.pth' % (opt.outf)
-classifier.loadFeat(path)
+inp_path = '%s/inpaint_model_%d.pth' % (opt.outf, epoch_r)
+classifier.load_state_dict(torch.load(inp_path))
 discriminator = PointNetDiscriminator()
 discriminator.loadFeat(path)
 
 
-if opt.model != '':
-    classifier.load_state_dict(torch.load(opt.model))
+# if opt.model != '':
+#     classifier.load_state_dict(torch.load(opt.model))
 
 
-optimizer = optim.RMSprop(classifier.parameters(), lr=0.001)
+optimizer = optim.RMSprop(classifier.parameters(), lr=0.0001)
 d_optimizer = optim.RMSprop(discriminator.parameters(), lr=0.001)
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.5)
 d_scheduler = optim.lr_scheduler.StepLR(d_optimizer, step_size=15, gamma=0.5)
@@ -140,7 +141,7 @@ for epoch in range(opt.nepoch):
 
         
 
-        # if (epoch < 2):
+        # if (epoch < 15):
         #     print('[%d: %d/%d] D loss: %f' % (epoch, i, num_batch, D_loss.item()))
         #     continue
         
@@ -149,11 +150,11 @@ for epoch in range(opt.nepoch):
         pred_complete = torch.cat((points, pred), 2)
         # print(pred_complete.shape)
         D_fake, _, _ = discriminator(pred_complete)
-        G_loss = torch.mean((1 - D_fake)**2)
+        # G_loss = torch.mean((1 - D_fake)**2)
         pred = pred.transpose(2, 1)
         target = target.transpose(2, 1)
         # print(pred.shape)
-        G_loss += 0.1 * (0.25 * classifier.create_loss(pred, target) + 0.75 * classifier.create_loss(target, pred))
+        G_loss = (0.25 * classifier.create_loss(pred, target) + 0.75 * classifier.create_loss(target, pred))
 
         G_loss.backward()
         optimizer.step()
@@ -170,7 +171,7 @@ for epoch in range(opt.nepoch):
         print('[%d: %d/%d] train loss: %f, %f, %f' % (epoch, i, num_batch, loss.item(), D_loss.item(), G_loss.item()))
 
         if i % 10 == 0:
-            j, data = next(enumerate(dataloader, 0))
+            j, data = next(enumerate(testdataloader, 0))
             points, target = data
             # target = target[:, 0]
             target = target.transpose(2, 1)
@@ -198,7 +199,7 @@ for epoch in range(opt.nepoch):
             np.savetxt(path2, complete_pc_gt.cpu().numpy(), fmt = "%10.5f");
     scheduler.step()
     d_scheduler.step()
-    #torch.save(classifier.state_dict(), '%s/cls_model_%d.pth' % (opt.outf, epoch))
+    torch.save(classifier.state_dict(), '%s/inpaint_model_%d.pth' % (opt.outf, epoch))
 
 total_correct = 0
 total_testset = 0
